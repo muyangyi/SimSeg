@@ -1,0 +1,120 @@
+runner:
+  name: clip
+  val_interval: 1 
+  val_interval_steps: 100
+  stable_random: step
+
+epoch: 20
+
+dist:
+  name: torch
+  fp16: True # for torch dist 
+
+  param:
+    opt_level: O1 # for apex dist 
+
+log:
+  interval_train: 10
+  interval_val: 1
+
+wandb:
+  enable: False
+  project: project_name
+  entity: entity_name
+
+ckpt:
+  dir: ./output
+  step_interval: 2000
+  filename: step_checkpoint.pth
+
+# Optimizing configurations
+optim:
+  name: torch.optim.AdamW
+  param: 
+    betas: !!python/tuple [0.9, 0.98]
+    eps: 1.0e-6
+    weight_decay: 0.001
+  lr:
+    name: cosine_schedule_with_warmup_min_lr_scale
+    init: 1.0e-4
+    warmup_proportion: 0.025
+    param:
+      num_cycles: 0.5
+      min_lr_scale: 0.1
+
+# ----- DATASET BUILDER -----
+data:
+  exp_name: simseg_eval
+  name: seg
+  train_type: shuffle # [sequential, shuffle, debias]
+  train_steps: -1
+
+  train_name: [cc3m, cc12m]
+  valid_name: [pascal_voc] # [pascal_voc, pascal_context, coco_stuff]
+
+  data_path: ./data/
+
+  batch_size: 1024
+  batch_size_val: 1
+
+  num_workers: 2
+  enable_valid: True
+  single_eval: False
+  cuda_eval: True
+
+# ----- TRAMSFORM BUILDER -----
+transforms:
+  train_transforms:  [random_resize_crop, autoaug]
+  valid_transforms: [resize]
+
+  resize:
+    size: 288
+  center_crop:
+    size: 224
+  random_resize_crop:
+    size: 224
+    scale: [0.6, 1.0]
+  input_size: 288 # declare for vit
+
+# ----- MODEL BUILDER -----
+model:
+  name: clip
+  max_length: 25
+
+  image_encoder:
+    name: vit_modelzoo
+    tag: vit_base_patch16_224_in21k
+    embedding_dim: 768
+    pretrained: True
+    trainable: True
+
+  text_encoder:
+    name: huggingface_modelzoo
+    tag: bert-base-uncased
+    embedding_dim: 768
+    pretrained: True
+    trainable: True
+    target_token_idx: 0
+
+  projection:
+    name: simple # complex
+    dim: 512
+
+  pool:
+    name: loda
+    loda:
+      image_k: 5
+      text_k: 1
+
+  syncbn: True
+  interpolate_pos_embed: False
+
+# ----- LOSS BUILDER -----
+loss:
+  name: NCE
+  global_reduce: True
+  nce_loss:
+    gather_backward: True
+  temperature:
+    name: parameter
+    value: 0.02

@@ -1,0 +1,15 @@
+addict
+numpy
+openmim
+pandas
+Pillow
+PyYAML
+requests
+six
+timm==0.6.13
+torch
+torchvision
+tqdm
+transformers==4.21.3
+opencv-python
+wandb

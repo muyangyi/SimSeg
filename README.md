@@ -10,10 +10,18 @@ Here are [[`Paper`](https://openaccess.thecvf.com/content/CVPR2023/html/Yi_A_Sim
 
 ## Performance
 
-Method  | Backbone | PASCAL VOC | PASCAL Context | COCO Stuff |
---------| :--: | :--------: | :------------: | :--------: |
-SimSeg  | ViT-S |   56.6    |      25.8      |    27.2    |
-SimSeg  | ViT-B |   57.4    |      26.2      |    29.7    |
+Zero-shot Semantic Segmentation   
+| Method  | Backbone | PASCAL VOC | PASCAL Context | COCO Stuff |
+| --------| :--: | :--------: | :------------: | :--------: |
+| SimSeg  | ViT-S |   56.6    |      25.8      |    27.2    |
+| SimSeg  | ViT-B |   57.4    |      26.2      |    29.7    |
+
+         
+Zero-shot Image-Text Retrieval      
+| Method  | Backbone | Dataset | I2T<br>R@1 | I2T<br>R@5 | I2T<br>R@10 | T2I<br>R@1 | T2I<br>R@5 | T2I<br>R@10 | RSUM |
+|--------| :------: | :-----: | :--------: | :--------: | :---------: | :--------: | :--------: | :---------: | :--: |
+| SimSeg  | ViT-B |  Flickr30K |    78.6    |    93.8    |     96.9    |    61.6    |    85.2    |     91.2    | 507.3 |
+| SimSeg  | ViT-B |  MSCOCO    |    51.2    |    76.4    |     85.2    |    35.8    |    62.5    |     73.0    | 384.1 |
 
 
 ## Checkpoints
@@ -144,6 +152,37 @@ python3 -m torch.distributed.launch --nproc_per_node=1 --master_port=65533 tools
 #### COCO Stuff
 ```shell
 python3 -m torch.distributed.launch --nproc_per_node=1 --master_port=65533 tools/seg_evaluation.py --ckpt_path=ckpts/simseg.vit-s.pth --cfg=configs/clip/simseg.vit-s.yaml data.valid_name=[coco_stuff]
+```
+
+#### 
+Switch to ViT-Base backbone by simply changing      
+   
+`--ckpt_path=ckpts/simseg.vit-s.pth --cfg=configs/clip/simseg.vit-s.yaml`    
+    
+to    
+    
+`--ckpt_path=ckpts/simseg.vit-b.pth --cfg=configs/clip/simseg.vit-b.yaml`   
+
+
+
+## Evaluation (Image-Text Retrieval)
+*Update 2025.01.26*
+
+Please download the [datasets](https://drive.google.com/drive/folders/1CbSsCV5CMXYWxMDuMNtoM_p0eMGgGE1A?usp=sharing) and save them under the `data/` folder.
+
+```none
+SimSeg
+├── data
+│   ├── coco
+│   │   ├── valid.parquet
+│   ├── f30k
+│   │   ├── valid.parquet
+```
+
+
+#### Run
+```shell
+python3 -m torch.distributed.launch --nproc_per_node=1 --master_port=65533 tools/retrieval_evaluation.py --ckpt_path=ckpts/simseg.vit-s.pth --cfg=configs/clip/simseg.vit-s.yaml data.valid_name=[f30k,coco] transforms.valid_transforms=[resize,center_crop] transforms.resize.size=324 transforms.center_crop.size=288 transforms.input_size=288
 ```
 
 #### 

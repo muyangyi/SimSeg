@@ -13,3 +13,4 @@ tqdm
 transformers==4.21.3
 opencv-python
 wandb
+pyarrow==13.0.0

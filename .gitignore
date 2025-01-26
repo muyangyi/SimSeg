@@ -73,6 +73,7 @@ merged.yaml
 # samples and labels
 VOCdevkit/
 coco_stuff164k/
+*.parquet
 
 # wandb log file
 wandb/

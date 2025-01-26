@@ -1,9 +1,10 @@
 import os
-
 import pandas as pd
+from io import BytesIO
 from PIL import Image
 import torch
 from transformers import AutoTokenizer
+import pyarrow.parquet as pq
 
 from simseg.utils import ENV, logger
 from simseg.datasets.clip.utils import process_caption
@@ -71,6 +72,51 @@ class RawImageDataset(torch.utils.data.Dataset):
         else:
             image_id, caption_id = self.image_ids[index], self.caption_ids[index]
             return image, input_ids, attention_mask, caption, image_id, caption_id
+
+    def __len__(self):
+        return self.length
+
+
+class ParquetDataset(torch.utils.data.Dataset):
+    """
+    Load F30K and COCO parquet dataset.
+    """
+
+    def __init__(self, cfg, dataset_name, tokenizer, data_path, transforms=None) -> None:
+        self.cfg = cfg
+        self.name = dataset_name
+        self.transforms = transforms
+        self.tokenizer = tokenizer
+        self.target_len = cfg.model.max_length
+        self.padding = 'max_length'
+
+        self.data_path = os.path.join(data_path, dataset_name, 'valid.parquet')
+        self.df = pq.read_table(self.data_path).to_pandas()
+
+        self.images = self.df['imbytes']
+        self.captions = self.df['caption']
+        self.image_ids = self.df['image_id']
+        self.caption_ids = self.df['id']
+
+        self.length = len(self.captions)
+
+    def _pad_tok(self, tok_idx):
+        return tok_idx[: self.target_len] + [0] * (self.target_len - len(tok_idx))
+
+    def __getitem__(self, index):
+        caption = self.captions[index]
+
+        encoded_caption = self.tokenizer(
+            caption, padding=self.padding, truncation=True, max_length=self.target_len
+        )
+        input_ids, attention_mask = torch.tensor(encoded_caption['input_ids']), torch.tensor(encoded_caption['attention_mask'])
+
+        image_bytes = self.images[index]
+        image = Image.open(BytesIO(image_bytes)).convert('RGB')
+        image = self.transforms(image)
+        image_id, caption_id = self.image_ids[index], self.caption_ids[index]
+
+        return image, input_ids, attention_mask, caption, image_id, caption_id
 
     def __len__(self):
         return self.length
@@ -146,6 +192,32 @@ def build_torch_valid_loader(cfg, name, mode='valid', **kwargs):
     batch_size = batch_size // ENV.size
     
     dataset = RawImageDataset(cfg=cfg, dataset_name=name, data_path=cfg.data.data_path, tokenizer=tokenizer, transforms=transforms, mode=mode)
+
+    datasampler = torch.utils.data.distributed.DistributedSampler(dataset, 
+        num_replicas=ENV.size,
+        rank=ENV.rank,
+        shuffle=False)
+
+    data_loader_train = torch.utils.data.DataLoader(
+        dataset, sampler=datasampler,
+        batch_size=batch_size,
+        num_workers=cfg.data.num_workers,
+        pin_memory=True,
+        drop_last=False,
+    )
+    return data_loader_train
+
+
+def build_parquet_valid_loader(cfg, name, mode='valid', **kwargs):
+    transforms = build_transforms(cfg, mode=mode)
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model.text_encoder.tag)
+
+    batch_size = cfg.data.batch_size if mode == "train" else cfg.data.batch_size_val
+    batch_size = batch_size // ENV.size
+
+    dataset = ParquetDataset(cfg=cfg, dataset_name=name, data_path=cfg.data.data_path, tokenizer=tokenizer, transforms=transforms)
+
+    logger.info("Building single parquet {} dataset name: {}.".format(mode, name))
 
     datasampler = torch.utils.data.distributed.DistributedSampler(dataset, 
         num_replicas=ENV.size,

@@ -11,9 +11,10 @@ except ImportError:
 from torch.nn.parallel import DistributedDataParallel as torch_DDP
 
 from simseg.core import init_device, cfg, update_cfg
-from simseg.datasets.clip.clip_dataset import build_torch_valid_loader
+from simseg.datasets.clip.clip_dataset import build_parquet_valid_loader
 from simseg.models import PIPELINE
 from simseg.utils import build_from_cfg, ENV, logger, all_gather
+from simseg.utils.interpolate_pe import interpolate_pos_embed
 
 from simseg.core.hooks.checkpoint import get_dist_state_dict
 
@@ -62,6 +63,8 @@ def calcaulate_retrieval_metrics_and_log(collection_dict, cuda_eval = True):
     logger.emph('-------------- {} Evaluation --------------\n'.format(collection_dict['dataset_name']))
 
 def evaluate_benchmark(loader, model, name):
+    logger.emph(f'Starting evaluation.')
+
     collection_keys = ['image_embeddings', 'text_embeddings', 'image_id', 'caption_id']
 
     epoch_state = {}
@@ -136,14 +139,20 @@ def main():
 
     # Runner: building and running
     checkpoint = torch.load(args.ckpt_path, map_location="cpu")
-    model_checkpoint = checkpoint['state_dict']  
+    model_checkpoint = checkpoint['state_dict'] 
+
+    if 'image_encoder.model.model.pos_embed' in checkpoint['state_dict']:
+        pos_embed_reshaped = interpolate_pos_embed(checkpoint['state_dict']['image_encoder.model.model.pos_embed'], model.module.image_encoder.model.model)   
+        checkpoint['state_dict']['image_encoder.model.model.pos_embed'] = pos_embed_reshaped
+        logger.info('Interpolate PE successed.')
+
     model.load_state_dict(get_dist_state_dict(model_checkpoint), strict=False)
     model.eval()
 
     logger.emph(f'Loaded ckpt path: {args.ckpt_path}')
 
     for name in cfg.data.valid_name:
-        valid_loader = build_torch_valid_loader(cfg, name, mode='valid')
+        valid_loader = build_parquet_valid_loader(cfg, name, mode='valid')
         with torch.no_grad():
             evaluate_benchmark(valid_loader, model, name)
 

@@ -166,7 +166,7 @@ to
 
 
 ## Evaluation (Image-Text Retrieval)
-*Update 2025.01.26*
+> *Update 2025.01.26*
 
 Please download the [datasets](https://drive.google.com/drive/folders/1CbSsCV5CMXYWxMDuMNtoM_p0eMGgGE1A?usp=sharing) and save them under the `data/` folder.
 
